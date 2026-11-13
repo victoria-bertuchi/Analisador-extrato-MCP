@@ -12,7 +12,7 @@ public class LeitorExtratoCsv {
 	public List<Transacao> ler (Path arquivo) throws IOException{
 		return Files.readAllLines(arquivo)
 					.stream()
-					.skip()
+					.skip(1)
 					.filter(linha -> !linha.isBlank())
 					.map(this::converterLinha)
 					.toList();
@@ -23,6 +23,7 @@ public class LeitorExtratoCsv {
 		LocalDate data = LocalDate.parse(partes[0].trim());
 		String descricao = partes[1].trim();
 		BigDecimal valor = new BigDecimal(partes[2].trim());
+		return new Transacao(data, valor, descricao);
 	}
 
 }
