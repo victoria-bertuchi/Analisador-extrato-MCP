@@ -12,18 +12,18 @@ import java.util.Map;
 
 public class ClassificadorPorPalavraChave  implements ClassificadorDeCategoria{
 
-	private final Map<Categoria, List<String>> palavrasporcategoria;
+	private final Map<Categoria, List<String>> palavrasPorCategoria;
 	
-	public  ClassificadorPorPalavraChave(Map<Categoria, List<String>> palavrasporcategoria) {
-		this.palavrasporcategoria = palavrasporcategoria;
+	public  ClassificadorPorPalavraChave(Map<Categoria, List<String>> palavrasPorCategoria) {
+		this.palavrasPorCategoria = palavrasPorCategoria;
 	}
 	
 	@Override
 	public Categoria classificar(Transacao transacao) {
 		// TODO Auto-generated method stub
 		String descricao = transacao.descricao().toLowerCase();
-		for (Categoria categoria: palavrasporcategoria.keySet()) {
-			for(String palavra: palavrasporcategoria.get(categoria)) {
+		for (Categoria categoria: palavrasPorCategoria.keySet()) {
+			for(String palavra: palavrasPorCategoria.get(categoria)) {
 				if(descricao.contains(palavra)) {
 					return categoria;
 				}
