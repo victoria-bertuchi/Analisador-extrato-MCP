@@ -14,10 +14,9 @@ import tools.jackson.databind.JsonNode;
 public class ClienteOpenAI implements ClienteIA {
 	
 	// endereço da internet pra onde mandamos as perguntas
-	private static final String URL = "https://api.openai.com/v1/chat/completions";
-	
+	private static final String URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 	//versão do gpt usada
-	private static final String MODELO = "gpt-4o-mini";
+	private static final String MODELO = "gemini-flash-lite-latest";
 	
 	// a chave, api-key
 	private final String chave;
@@ -53,12 +52,23 @@ public class ClienteOpenAI implements ClienteIA {
                 .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(corpo)))
                 .build();
 
-        //Envia pela internet e espera a resposta
-        HttpResponse<String> resposta = http.send(pedido, HttpResponse.BodyHandlers.ofString());
+        //Envia pela internet e tenta de novo se o servidor estiver ocupado (até 4 vezes)
+        HttpResponse<String> resposta = null;
+        for (int tentativa = 1; tentativa <=4; tentativa++) {
+        	resposta = http.send(pedido,HttpResponse.BodyHandlers.ofString());
+        
 
-        //se a OpenAI devolver erro (código diferente de 200), avisa o motivo
+	        //caso seja 503= servidor lotado, 429= pedidos demais, ele tenta mais algumas vezes; qualquer outro código ele para de tentar 
+	        if (resposta.statusCode() != 503 && resposta.statusCode() !=429) {
+	            break;
+	        }
+	        
+	        System.out.println("Servidor ocupado, tentando denovo em " + (tentativa * 5) + " segundos...");
+	        Thread.sleep(tentativa * 5000L); //espera 5s, 10s, 15s...
+        }
+        //200= deu certo; qualquer outra coisa vira um erro
         if (resposta.statusCode() != 200) {
-            throw new IllegalStateException("Erro da OpenAI " + resposta.statusCode() + ": " + resposta.body());
+        	throw new IllegalStateException ("Erro da IA" + resposta.statusCode() + ": " + resposta.body());
         }
 
         //Tira só o texto da resposta, que fica em choices[0].message.content
