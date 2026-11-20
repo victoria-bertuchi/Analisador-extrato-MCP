@@ -11,7 +11,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.net.http.HttpResponse;
 import tools.jackson.databind.JsonNode;
 
-public class ClienteOpenAI implements ClienteIA {
+public class ClienteGemini implements ClienteIA {
 	
 	// endereço da internet pra onde mandamos as perguntas
 	private static final String URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
@@ -28,7 +28,7 @@ public class ClienteOpenAI implements ClienteIA {
 	private final ObjectMapper json = JsonMapper.builder().build();
 			
 	//recebe a chave de fora e guarda na gaveta (construtor)
-	public ClienteOpenAI (String chave) {
+	public ClienteGemini (String chave) {
 		this.chave = chave;
 	}
 	

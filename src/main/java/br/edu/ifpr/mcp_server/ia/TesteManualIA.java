@@ -22,7 +22,7 @@ public class TesteManualIA {
 		}
 		
 		//monta o classificador: cria o cliente do gpt com a chave e entrega p/ classificador
-		ClassificadorPorIA classificador = new ClassificadorPorIA(new ClienteOpenAI(chave));
+		ClassificadorPorIA classificador = new ClassificadorPorIA(new ClienteGemini(chave));
 		
 		//descriçoes de exemplo
 		String[] descricoes = {"Ifd*Saiko Sushi Comerc", "Uber *Trip", "Netflix.Com", "Ifd*Drogaria Sao Paulo", "Petz Curitiba"};
