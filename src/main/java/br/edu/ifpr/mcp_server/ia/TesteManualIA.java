@@ -15,7 +15,7 @@ public class TesteManualIA {
 	
 	public static void main(String[] args) {
 		//le a chave da variavel de ambiente
-		String chave = System.getenv("OPENAI_API_KEY");
+		String chave = System.getenv("GEMINI_API_KEY");
 		if (chave == null || chave.isBlank()) {
 			System.out.println("Configure a variável de ambiente OPENAI_API_KEY antes de rodar.");
             return;

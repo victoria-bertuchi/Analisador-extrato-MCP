@@ -73,9 +73,9 @@ public class GastosPorCategoriaTool implements McpToolDefinition {
       }
 
       //a chave da IA vem da variável de ambiente, nunca do código
-      String chave = System.getenv("OPENAI_API_KEY");
+      String chave = System.getenv("GEMINI_API_KEY");
       if (chave == null || chave.isBlank()) {
-         return erro("A chave da IA não está configurada (variável de ambiente OPENAI_API_KEY).");
+         return erro("A chave da IA não está configurada (variável de ambiente GEMINI_API_KEY).");
       }
 
       try {
