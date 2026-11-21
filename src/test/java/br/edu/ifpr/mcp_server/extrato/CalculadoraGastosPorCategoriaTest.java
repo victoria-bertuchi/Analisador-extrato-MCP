@@ -16,8 +16,8 @@ import org.junit.jupiter.api.Test;
  */
 
 public class CalculadoraGastosPorCategoriaTest {
-	// Classificador falso: devolve a categoria já combinada para cada descrição.
-    // Assim o teste confere só a soma, e não se a classificação está certa.
+	//um classificardor falso, devolve a categoria já combinada para cada descrição.
+    //o teste confere só a soma, e não se a classificação está certa.
     private final ClassificadorDeCategoria classificadorFalso = new ClassificadorDeCategoria() {
         @Override
         public Categoria classificar(Transacao transacao) {
@@ -31,12 +31,12 @@ public class CalculadoraGastosPorCategoriaTest {
 
     private final CalculadoraGastosPorCategoria calculadora = new CalculadoraGastosPorCategoria(classificadorFalso);
 
-    // Data fixa porque a calculadora não usa a data
+    //data fixa porque a calculadora não usa a data
     private Transacao transacao(String descricao, String valor) {
         return new Transacao(LocalDate.now(), new BigDecimal(valor), descricao);
     }
 
-    // Objetivo: conferir que duas compras da mesma categoria são somadas num total só
+    //conferir que duas compras da mesma categoria são somadas num total só
     @Test
     @DisplayName("Soma as compras da mesma categoria")
     void somaMesmaCategoria() {
@@ -49,7 +49,7 @@ public class CalculadoraGastosPorCategoriaTest {
         assertEquals(Map.of(Categoria.TRANSPORTE, new BigDecimal("30.50")), totais);
     }
 
-    // Objetivo: conferir que compras de categorias diferentes ficam em totais separados
+    //conferir que compras de categorias diferentes ficam em totais separados
     @Test
     @DisplayName("Separa o total de cada categoria")
     void separaPorCategoria() {
@@ -63,7 +63,7 @@ public class CalculadoraGastosPorCategoriaTest {
                             Categoria.DELIVERY, new BigDecimal("45.90")), totais);
     }
 
-    // Objetivo: conferir que valores negativos (pagamento da fatura, estorno) não entram na soma
+    // conferir que valores negativos (pagamento da fatura, estorno) não entram na soma
     @Test
     @DisplayName("Ignora valores negativos")
     void ignoraNegativos() {
