@@ -63,7 +63,7 @@ public class ClienteGemini implements ClienteIA {
 	            break;
 	        }
 	        
-	        System.out.println("Servidor ocupado, tentando denovo em " + (tentativa * 5) + " segundos...");
+	        System.err.println("Servidor ocupado, tentando denovo em " + (tentativa * 5) + " segundos...");
 	        Thread.sleep(tentativa * 5000L); //espera 5s, 10s, 15s...
         }
         //200= deu certo; qualquer outra coisa vira um erro
