@@ -9,6 +9,7 @@ import java.util.Map;
 
 import br.edu.ifpr.mcp_server.extrato.CalculadoraGastosPorCategoria;
 import br.edu.ifpr.mcp_server.extrato.Categoria;
+import br.edu.ifpr.mcp_server.extrato.ClassificadorDeCategoria;
 import br.edu.ifpr.mcp_server.extrato.ClassificadorPorIA;
 import br.edu.ifpr.mcp_server.extrato.LeitorExtratoCsv;
 import br.edu.ifpr.mcp_server.extrato.Transacao;
@@ -24,7 +25,7 @@ import io.modelcontextprotocol.spec.McpSchema.Tool;
 
 /**
  * Ferramenta MCP "gastos_por_categoria".
- * Recebe o caminho de um extrato em CSV, classifica cada compra com a IA
+ * Recebe o caminho de um extrato em CSV, classifica cada compra com a IA (Gemini)
  * e devolve quanto foi gasto em cada categoria.
  */
 public class GastosPorCategoriaTool implements McpToolDefinition {
@@ -49,7 +50,7 @@ public class GastosPorCategoriaTool implements McpToolDefinition {
                                  + "e devolve o total gasto em cada categoria")
                       .build();
 
-      //quando o Claude chamar a ferramenta, o método run  é executado
+      //quando o Claude chamar a ferramenta, o método run (abaixo) é executado
       SyncToolSpecification toolSpec = SyncToolSpecification.builder()
                                                              .tool(tool)
                                                              .callHandler(this::run)
@@ -75,15 +76,15 @@ public class GastosPorCategoriaTool implements McpToolDefinition {
       //a chave da IA vem da variável de ambiente, nunca do código
       String chave = System.getenv("GEMINI_API_KEY");
       if (chave == null || chave.isBlank()) {
-         return erro("A chave da IA não está configurada (variável de ambiente GEMINI_API_KEY).");
+         return erro("A variável de ambiente GEMINI_API_KEY não está configurada. Veja o README.");
       }
 
       try {
+         //lê o CSV e transforma cada linha numa Transacao
          List<Transacao> transacoes = new LeitorExtratoCsv().ler(arquivo);
 
-         //monta as peças, calculadora usa o classificador por IA, que usa o cliente do Gemini
-         CalculadoraGastosPorCategoria calculadora =
-               new CalculadoraGastosPorCategoria(new ClassificadorPorIA(new ClienteGemini(chave)));
+         ClassificadorDeCategoria classificador = new ClassificadorPorIA(new ClienteGemini(chave));
+         CalculadoraGastosPorCategoria calculadora = new CalculadoraGastosPorCategoria(classificador);
          Map<Categoria, BigDecimal> totais = calculadora.calcular(transacoes);
 
          return CallToolResult.builder()
@@ -94,12 +95,12 @@ public class GastosPorCategoriaTool implements McpToolDefinition {
          return erro("Não foi possível ler o arquivo: " + e.getMessage());
       }
       catch (IllegalStateException e) {
-         //lançado pelo ClassificadorPorIA quando não consegue falar com a IA
-         return erro(e.getMessage());
+         //o clienteGemini lança este erro quando a IA não responde (sem internet, chave errada, servidor fora do ar)
+         return erro("A IA não conseguiu classificar as compras: " + e.getMessage());
       }
       catch (RuntimeException e) {
          //data ou valor que não dá para converter: a linha não está no formato date,title,amount
-         return erro("O arquivo não está no formato esperado (date,title,amount): " + e.getMessage());
+         return erro("O arquivo não está num formato de extrato reconhecido: " + e.getMessage());
       }
    }
 
