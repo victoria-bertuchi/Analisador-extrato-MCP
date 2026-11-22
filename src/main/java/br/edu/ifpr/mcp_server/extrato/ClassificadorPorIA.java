@@ -18,7 +18,8 @@ public class ClassificadorPorIA implements ClassificadorDeCategoria {
 			Use apenas: DELIVERY, TRANSPORTE, MERCADO, FARMACIA, SAUDE, STREAMING, ALIMENTACAO,
 			EDUCACAO, LAZER, VESTUARIO, CONTAS_DA_CASA, PET, OUTROS.
 			Use o nome do estabelecimento para decidir (ex.: Ifood = DELIVERY, Uber = TRANSPORTE,
-			Netflix = STREAMING, supermercado = MERCADO, drogaria = FARMACIA, cinema = LAZER).
+			Netflix = STREAMING, supermercado = MERCADO, restaurante, lanchonete ou padaria = ALIMENTACAO,
+			drogaria = FARMACIA, cinema = LAZER).
 			Pix ou transferência para uma pessoa, sem nome de estabelecimento, é OUTROS.
 			Se não tiver certeza, use OUTROS.
 			Responda uma linha por lançamento, no formato NUMERO=CATEGORIA, sem mais nenhum texto.
