@@ -12,14 +12,14 @@ import java.util.List;
  * transforma cada linha em uma transação 
  */
 
-public class LeitorExtratoCsv {
+public class LeitorExtratoCsvNubank implements LeitorDeExtrato{
 	/**
 	 * Lê o arquivo, pula o cabelçalho e linhas vazias
 	 * @param arquivo caminho do CSV
 	 * @return lista de transações do extrato
 	 * @throws IOException se o arquivo não existir ou não puder ser lido
 	 */
-	
+	@Override
 	public List<Transacao> ler (Path arquivo) throws IOException{
 		return Files.readAllLines(arquivo)
 					.stream()

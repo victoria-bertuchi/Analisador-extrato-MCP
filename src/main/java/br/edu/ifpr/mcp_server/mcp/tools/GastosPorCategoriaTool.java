@@ -11,7 +11,7 @@ import br.edu.ifpr.mcp_server.extrato.CalculadoraGastosPorCategoria;
 import br.edu.ifpr.mcp_server.extrato.Categoria;
 import br.edu.ifpr.mcp_server.extrato.ClassificadorDeCategoria;
 import br.edu.ifpr.mcp_server.extrato.ClassificadorPorIA;
-import br.edu.ifpr.mcp_server.extrato.LeitorExtratoCsv;
+import br.edu.ifpr.mcp_server.extrato.LeitorDeExtratoFactory;
 import br.edu.ifpr.mcp_server.extrato.Transacao;
 import br.edu.ifpr.mcp_server.ia.ClienteGemini;
 import br.edu.ifpr.mcp_server.mcp.utils.McpToolDefinition;
@@ -81,7 +81,7 @@ public class GastosPorCategoriaTool implements McpToolDefinition {
 
       try {
          //lê o CSV e transforma cada linha numa Transacao
-         List<Transacao> transacoes = new LeitorExtratoCsv().ler(arquivo);
+          List<Transacao> transacoes = LeitorDeExtratoFactory.para(arquivo).ler(arquivo);
 
          ClassificadorDeCategoria classificador = new ClassificadorPorIA(new ClienteGemini(chave));
          CalculadoraGastosPorCategoria calculadora = new CalculadoraGastosPorCategoria(classificador);
