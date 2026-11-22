@@ -67,11 +67,10 @@ public class McpClient01SyncStdio {
                                   );
       // constrói o objeto cliente
       return McpClient.sync(transport)
-                      // CONFIGURAÇÃO DO LISTENER DE LOGGING:
-                      // Registra o handler (tratador) para capturar as
-                      // notificações enviadas pelo servidor
-                      .loggingConsumer(this::loggingMessageNotification)
-                      .build();
+              // a IA classifica uma compra por vez, então extratos grandes demoram
+              .requestTimeout(java.time.Duration.ofMinutes(5))
+              .loggingConsumer(this::loggingMessageNotification)
+              .build();
    }
 
    private void execute() {

@@ -7,33 +7,31 @@ import java.util.Map;
 
 /**
  * Soma quanto foi gasto em cada categoria.
- * Não sabe classificar sozinha: recebe um classificador pelo construtor
- * (pode ser o da IA ou o de palavra-chave), seguindo o padrão Strategy.
+ * Não sabe classificar sozinha: recebe um classificador pelo construtor,
+ * seguindo o padrão Strategy.
  */
-
 public class CalculadoraGastosPorCategoria {
 	private final ClassificadorDeCategoria classificador;
 
-    public CalculadoraGastosPorCategoria(ClassificadorDeCategoria classificador) {
-        this.classificador = classificador;
-    }
+	public CalculadoraGastosPorCategoria(ClassificadorDeCategoria classificador) {
+		this.classificador = classificador;
+	}
 
-    public Map<Categoria, BigDecimal> calcular(List<Transacao> transacoes) {
-        //EnumMap é um Map feito para chaves que são enum: guarda as categorias na ordem do enum
-        Map<Categoria, BigDecimal> totais = new EnumMap<>(Categoria.class);
+	public Map<Categoria, BigDecimal> calcular(List<Transacao> transacoes) {
+		// só entram valores positivos (gastos); negativos são entradas, pagamentos ou estornos
+		List<Transacao> gastos = transacoes.stream()
+				.filter(t -> t.valor().compareTo(BigDecimal.ZERO) > 0)
+				.toList();
 
-        for (Transacao transacao : transacoes) {
-            //só soma valores positivos (compras). Valores negativos no extrato
-            //são pagamentos da fatura ou estornos, e não são gastos
-            if (transacao.valor().compareTo(BigDecimal.ZERO) > 0) {
-                Categoria categoria = classificador.classificar(transacao);
+		// classifica todos os gastos de uma vez (a IA recebe tudo numa única pergunta)
+		List<Categoria> categorias = classificador.classificarTodas(gastos);
 
-                //pega o total que a categoria já tem (ou zero, se for a primeira vez) e soma o valor
-                BigDecimal totalAtual = totais.getOrDefault(categoria, BigDecimal.ZERO);
-                totais.put(categoria, totalAtual.add(transacao.valor()));
-            }
-        }
-        return totais;
-    }
-
+		// EnumMap é um Map feito para chaves que são enum: guarda as categorias na ordem do enum
+		Map<Categoria, BigDecimal> totais = new EnumMap<>(Categoria.class);
+		for (int i = 0; i < gastos.size(); i++) {
+			// pega o total que a categoria já tem (ou zero, se for a primeira vez) e soma o valor
+			totais.merge(categorias.get(i), gastos.get(i).valor(), BigDecimal::add);
+		}
+		return totais;
+	}
 }
