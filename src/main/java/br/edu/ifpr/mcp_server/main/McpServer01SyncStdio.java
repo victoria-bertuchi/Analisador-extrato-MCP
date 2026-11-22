@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import br.edu.ifpr.mcp_server.mcp.tools.SimpleReportTool;
 import br.edu.ifpr.mcp_server.mcp.tools.GastosPorCategoriaTool;
+import br.edu.ifpr.mcp_server.mcp.tools.ResumoDoMesTool;
 import br.edu.ifpr.mcp_server.mcp.utils.McpToolDefinition;
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
@@ -28,7 +29,7 @@ public class McpServer01SyncStdio {
                           SyncSpecification<SingleSessionSyncSpecification> mcp)
                 throws Exception {
       // cria a lista de ferramentas disponíveis no servidor...
-      List<McpToolDefinition> tools = List.of(new SimpleReportTool(), new GastosPorCategoriaTool());
+      List<McpToolDefinition> tools = List.of(new SimpleReportTool(), new GastosPorCategoriaTool(), new ResumoDoMesTool());
       // ...para cada ferramenta, executa seu registro para posterior execução
       for (McpToolDefinition tool : tools)
          if (tool != null)
