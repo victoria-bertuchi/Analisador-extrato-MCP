@@ -1,44 +1,23 @@
 package br.edu.ifpr.mcp_server.extrato;
 
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Lê o extrato exportado do banco (CSV no formato date, title, amount)
- * transforma cada linha em uma transação 
+ * Lê o CSV do Nubank (date,title,amount).
+ * Nesse formato o gasto já vem positivo, ao contrário do extrato de conta.
  */
+public class LeitorExtratoCsvNubank implements LeitorDeExtrato {
 
-public class LeitorExtratoCsvNubank implements LeitorDeExtrato{
-	/**
-	 * Lê o arquivo, pula o cabelçalho e linhas vazias
-	 * @param arquivo caminho do CSV
-	 * @return lista de transações do extrato
-	 * @throws IOException se o arquivo não existir ou não puder ser lido
-	 */
-	@Override
-	public List<Transacao> ler (Path arquivo) throws IOException{
-		return Files.readAllLines(arquivo)
-					.stream()
-					.skip(1)
-					.filter(linha -> !linha.isBlank())
-					.map(this::converterLinha)
-					.toList();
-	}
-	
-	/**
-	 * Converte uma linha do CSV em transação 
-	 */
-	
-	private Transacao converterLinha(String linha) {
-		String[] partes = linha.split(",");
-		LocalDate data = LocalDate.parse(partes[0].trim());
-		String descricao = partes[1].trim();
-		BigDecimal valor = new BigDecimal(partes[2].trim());
-		return new Transacao(data, valor, descricao);
-	}
+    // reaproveita o leitor genérico, que já trata aspas, vírgula dentro da descrição e datas
+    private final LeitorDeExtrato leitorGenerico = new LeitorExtratoCsvGenerico();
 
+    @Override
+    public List<Transacao> ler(Path arquivo) throws IOException {
+        // o genérico inverte o sinal (pensando em extrato de conta); aqui desfazemos a inversão
+        return leitorGenerico.ler(arquivo).stream()
+                .map(t -> new Transacao(t.data(), t.valor().negate(), t.descricao()))
+                .toList();
+    }
 }
