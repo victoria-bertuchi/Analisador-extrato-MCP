@@ -7,7 +7,18 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * Lê o extrato exportado do banco (CSV no formato date, title, amount)
+ * transforma cada linha em uma transação 
+ */
+
 public class LeitorExtratoCsv {
+	/**
+	 * Lê o arquivo, pula o cabelçalho e linhas vazias
+	 * @param arquivo caminho do CSV
+	 * @return lista de transações do extrato
+	 * @throws IOException se o arquivo não existir ou não puder ser lido
+	 */
 	
 	public List<Transacao> ler (Path arquivo) throws IOException{
 		return Files.readAllLines(arquivo)
@@ -17,6 +28,10 @@ public class LeitorExtratoCsv {
 					.map(this::converterLinha)
 					.toList();
 	}
+	
+	/**
+	 * Converte uma linha do CSV em transação 
+	 */
 	
 	private Transacao converterLinha(String linha) {
 		String[] partes = linha.split(",");
