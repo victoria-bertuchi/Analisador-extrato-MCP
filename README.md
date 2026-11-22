@@ -122,6 +122,8 @@ Todos os builds podem ser feitos no Eclipse (botão direito no projeto → **Run
 
 Os testes de integração também podem ser rodados no Eclipse, depois de gerar o servidor: botão direito na classe `GastosPorCategoriaToolIT` → **Run As → JUnit Test**.
 
+Gere o servidor **antes** do cliente: o `clean` apaga a pasta `target`, onde fica o cliente.
+
 **Antes de gerar o servidor, feche o Claude Desktop e o MCP Inspector**: se o servidor antigo estiver em uso, o Windows não deixa o Maven apagar a pasta `server`.
 
 ## Cliente MCP
@@ -136,7 +138,7 @@ cd target\dist-client
 java -jar mcp_server01_client.jar
 ```
 
-No menu: **1 - Ferramentas** → escolha `gastos_por_categoria` → em `arquivo`, informe o caminho completo do CSV → em `conteudo`, só aperte ENTER (é opcional).
+O cliente mostra as ferramentas numeradas. Digite o número de `gastos_por_categoria`. Quando pedir `conteudo`, só aperte ENTER (é opcional); quando pedir `arquivo`, informe o caminho completo do CSV. Os comandos `listar` (atualiza a lista) e `sair` (encerra) também estão disponíveis. O cliente espera até 5 minutos pela resposta de cada ferramenta.
 
 ## MCP Inspector
 
@@ -144,10 +146,10 @@ Requer Node.js. Na pasta do projeto, depois de gerar o servidor:
 
 ```
 set GEMINI_API_KEY=sua_chave
-npx @modelcontextprotocol/inspector java -jar server/mcp_server01_server.jar
+npx @modelcontextprotocol/inspector -e GEMINI_API_KEY=%GEMINI_API_KEY% java -jar server\mcp_server01_server.jar
 ```
 
-O Inspector abre no navegador. Clique em **Connect** → aba **Tools** → **List Tools** → `gastos_por_categoria`, preencha `arquivo` com o caminho do CSV e clique em **Run Tool**.
+O `-e` repassa a chave para o servidor aberto pelo Inspector. O Inspector abre no navegador: ligue a conexão (**Connected**) → aba **Tools** → **Gastos por categoria** → preencha `arquivo` com o caminho do CSV → execute.
 
 ## Como configurar no Claude Desktop
 
@@ -205,7 +207,7 @@ Gastos por categoria:
 Total: R$ 96.40
 ```
 
-A IA classifica uma compra por vez, então um extrato grande pode demorar. Para o primeiro teste, use um arquivo pequeno.
+As compras são enviadas à IA em lotes de até 50 por pergunta, então mesmo extratos grandes são classificados com poucas chamadas.
 
 ## Formatos de extrato aceitos
 
@@ -235,7 +237,9 @@ Também aceita:
 - valor `1.234,56` ou `1234.56`;
 - datas `05/11/2026`, `5/11/2026`, `05-11-2026`, `2026-11-05`, `2026/11/05`;
 - linhas antes do cabeçalho (nome, agência, conta);
-- arquivo salvo em UTF-8 ou com acentuação do Windows.
+- arquivo salvo em UTF-8 ou com acentuação do Windows;
+- descrição entre aspas com vírgula ou quebra de linha dentro;
+- linhas de rodapé, totais ou sem data (são ignoradas).
 
 No extrato de conta, o gasto vem **negativo** (o dinheiro saiu da conta). Quando existe a coluna de tipo, ela é que decide: só as linhas de **Saída** contam como gasto. Linhas de saldo ("Saldo Anterior", "Saldo do dia") e entradas (Pix recebido, salário) são ignoradas.
 
@@ -263,8 +267,8 @@ Pacote `br.edu.ifpr.mcp_server.extrato` (regras do extrato) e `br.edu.ifpr.mcp_s
 | `LeitorExtratoCsvNubank` | Lê o CSV do Nubank (`date,title,amount`). |
 | `LeitorExtratoCsvGenerico` | Lê extratos de conta, achando as colunas pelo nome. |
 | `LeitorDeExtratoFactory` | Olha o cabeçalho e escolhe o leitor certo. |
-| `ClassificadorDeCategoria` | Interface: recebe uma transação e devolve a categoria. |
-| `ClassificadorPorIA` | Classifica usando a IA. |
+| `ClassificadorDeCategoria` | Interface: recebe uma transação (ou uma lista delas) e devolve a categoria. |
+| `ClassificadorPorIA` | Classifica usando a IA, mandando até 50 lançamentos por pergunta. |
 | `ClienteIA` | Interface: manda uma pergunta para a IA e devolve a resposta. |
 | `ClienteGemini` | Implementação com o Google Gemini (tenta de novo até 4 vezes se o servidor estiver ocupado). |
 | `CalculadoraGastosPorCategoria` | Soma os gastos de cada categoria (ignora entradas). |
@@ -315,8 +319,9 @@ A chave da API **nunca** fica no código nem no GitHub. Ela é lida da variável
 ## Limitações conhecidas
 
 - A classificação depende da IA: sem chave, sem internet ou com o Gemini fora do ar, a ferramenta devolve uma mensagem de erro explicando o motivo.
+- A classificação é feita pela IA e pode variar entre execuções em lançamentos ambíguos (ex.: Pix para um nome que pode ser pessoa ou empresa). Os valores e o total não mudam.
 - Um Pix enviado para uma pessoa ("Pix - Enviado - Fulano") não diz o que foi comprado, então a IA tende a classificar como `OUTROS`.
-- Testado com o extrato do Banco do Brasil e o CSV do Nubank. Outros bancos funcionam se seguirem a convenção mais comum (débito negativo ou coluna Entrada/Saída). Um banco que traga o gasto positivo sem coluna de tipo seria lido sem erro, mas com total errado; para ele, basta criar um novo leitor e registrá-lo na factory.
+- Testado com extratos reais do Banco do Brasil, do Santander e do Nubank. Outros bancos funcionam se seguirem a convenção mais comum (débito negativo ou coluna Entrada/Saída). Um banco que traga o gasto positivo sem coluna de tipo seria lido sem erro, mas com total errado; para ele, basta criar um novo leitor e registrá-lo na factory.
 - Extratos com valor em duas colunas ("Crédito" e "Débito") não são suportados.
 
 ## Melhorias futuras
@@ -324,4 +329,3 @@ A chave da API **nunca** fica no código nem no GitHub. Ela é lida da variável
 - Leitores específicos para faturas de cartão de outros bancos.
 - Suporte a extratos com valor em duas colunas ("Crédito" e "Débito").
 - Leitura de outros formatos além de CSV (XLSX, OFX).
-- Classificar várias compras numa única chamada à IA, para extratos grandes ficarem mais rápidos.
