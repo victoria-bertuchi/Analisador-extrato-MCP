@@ -2,6 +2,7 @@ package br.edu.ifpr.mcp_server.mcp.tools;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -25,29 +26,33 @@ import io.modelcontextprotocol.spec.McpSchema.Tool;
 
 /**
  * Ferramenta MCP "gastos_por_categoria".
- * Recebe o caminho de um extrato em CSV, classifica cada compra com a IA (Gemini)
+ * Recebe um extrato em CSV (pelo caminho ou anexado no chat), classifica cada compra com a IA (Gemini)
  * e devolve quanto foi gasto em cada categoria.
  */
 public class GastosPorCategoriaTool implements McpToolDefinition {
 
    private static final String NOME_FERRAMENTA = "gastos_por_categoria";
    private static final String ATRIBUTO_ARQUIVO = "arquivo";
+   private static final String ATRIBUTO_CONTEUDO = "conteudo";
 
    @Override
    public void register(SyncSpecification<SingleSessionSyncSpecification> mcp) throws Exception {
-      //diz ao Claude que a ferramenta recebe um texto obrigatório chamado "arquivo"
+      //a ferramenta aceita o caminho do arquivo OU o texto do CSV (quando o arquivo é anexado no chat)
       Map<String, Object> inputSchema =
             Map.of("type", "object",
-                   "properties", Map.of(ATRIBUTO_ARQUIVO,
-                                        Map.of("type", "string",
-                                               "description", "Caminho completo do arquivo CSV do extrato")),
-                   "required", List.of(ATRIBUTO_ARQUIVO),
+                   "properties", Map.of(
+                         ATRIBUTO_ARQUIVO, Map.of("type", "string",
+                               "description", "Caminho completo do arquivo CSV do extrato no computador"),
+                         ATRIBUTO_CONTEUDO, Map.of("type", "string",
+                               "description", "Texto completo do CSV, linha por linha, quando o usuário anexar o arquivo no chat")),
                    "additionalProperties", false);
 
       Tool tool = Tool.builder(NOME_FERRAMENTA, inputSchema)
                       .title("Gastos por categoria")
                       .description("Lê um extrato bancário em CSV, classifica cada compra com IA "
-                                 + "e devolve o total gasto em cada categoria")
+                                 + "e devolve o total gasto em cada categoria. "
+                                 + "Se o usuário anexar o CSV no chat, passe o texto completo do arquivo em 'conteudo', "
+                                 + "sem alterar nenhuma linha. Se ele informar um caminho, use 'arquivo'.")
                       .build();
 
       //quando o Claude chamar a ferramenta, o método run (abaixo) é executado
@@ -60,17 +65,12 @@ public class GastosPorCategoriaTool implements McpToolDefinition {
 
    @Override
    public CallToolResult run(McpSyncServerExchange exchange, CallToolRequest request) {
-      //confere o arquivo antes de começar, para devolver uma mensagem clara em vez de quebrar
-      Object valorRecebido = request.arguments().get(ATRIBUTO_ARQUIVO);
-      if (!(valorRecebido instanceof String caminho) || caminho.isBlank()) {
-         return erro("Informe o caminho do arquivo CSV do extrato.");
+      Path arquivo;
+      try {
+         arquivo = arquivoRecebido(request.arguments());
       }
-      Path arquivo = Path.of(caminho);
-      if (!Files.exists(arquivo)) {
-         return erro("Arquivo não encontrado: " + caminho);
-      }
-      if (!caminho.toLowerCase().endsWith(".csv")) {
-         return erro("O arquivo precisa ser .csv: " + caminho);
+      catch (IllegalArgumentException | IOException e) {
+         return erro(e.getMessage());
       }
 
       //a chave da IA vem da variável de ambiente, nunca do código
@@ -80,8 +80,8 @@ public class GastosPorCategoriaTool implements McpToolDefinition {
       }
 
       try {
-         //lê o CSV e transforma cada linha numa Transacao
-          List<Transacao> transacoes = LeitorDeExtratoFactory.para(arquivo).ler(arquivo);
+         //a factory olha o cabeçalho do arquivo e escolhe o leitor certo
+         List<Transacao> transacoes = LeitorDeExtratoFactory.para(arquivo).ler(arquivo);
 
          ClassificadorDeCategoria classificador = new ClassificadorPorIA(new ClienteGemini(chave));
          CalculadoraGastosPorCategoria calculadora = new CalculadoraGastosPorCategoria(classificador);
@@ -95,13 +95,34 @@ public class GastosPorCategoriaTool implements McpToolDefinition {
          return erro("Não foi possível ler o arquivo: " + e.getMessage());
       }
       catch (IllegalStateException e) {
-         //o clienteGemini lança este erro quando a IA não responde (sem internet, chave errada, servidor fora do ar)
+         //o ClienteGemini lança este erro quando a IA não responde (sem internet, chave errada, servidor fora do ar)
          return erro("A IA não conseguiu classificar as compras: " + e.getMessage());
       }
       catch (RuntimeException e) {
-         //data ou valor que não dá para converter: a linha não está no formato date,title,amount
+         //data ou valor que não dá para converter, ou coluna que falta no cabeçalho
          return erro("O arquivo não está num formato de extrato reconhecido: " + e.getMessage());
       }
+   }
+
+   //devolve o arquivo a ser lido: o caminho informado ou, se veio o texto do CSV, um arquivo temporário com ele
+   private Path arquivoRecebido(Map<String, Object> argumentos) throws IOException {
+      if (argumentos.get(ATRIBUTO_CONTEUDO) instanceof String conteudo && !conteudo.isBlank()) {
+         Path temporario = Files.createTempFile("extrato", ".csv");
+         Files.writeString(temporario, conteudo, StandardCharsets.UTF_8);
+         temporario.toFile().deleteOnExit();
+         return temporario;
+      }
+      if (!(argumentos.get(ATRIBUTO_ARQUIVO) instanceof String caminho) || caminho.isBlank()) {
+         throw new IllegalArgumentException("Informe o caminho do arquivo CSV ou anexe o arquivo no chat.");
+      }
+      Path arquivo = Path.of(caminho.replace("\"", "").trim());
+      if (!Files.exists(arquivo)) {
+         throw new IllegalArgumentException("Arquivo não encontrado: " + caminho);
+      }
+      if (!arquivo.toString().toLowerCase().endsWith(".csv")) {
+         throw new IllegalArgumentException("O arquivo precisa ser .csv: " + caminho);
+      }
+      return arquivo;
    }
 
    //monta o texto de resposta, uma linha por categoria, e o total no final
