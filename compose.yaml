@@ -10,10 +10,16 @@ services:
      # servidor/ip e porta em que a aplicação responderá
      ports:
        - "127.0.0.1:6274:6274"
-     # 
+     # repassa a chave do Gemini do seu computador para o contêiner (se não existir, vai vazia
+     # e o servidor usa o classificador local)
+     environment:
+       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
      # ro: read-only
+     # - ./server: o servidor MCP gerado pelo build
+     # - ./src/test/resources/extratos: CSVs de exemplo (dentro do contêiner ficam em /data)
      volumes:
        - ./server:/opt/mcp/server:ro
+       - ./src/test/resources/extratos:/data:ro
      # executa o servidor MCP em Java
      command:
        - java

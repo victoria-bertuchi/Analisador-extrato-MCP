@@ -23,336 +23,337 @@ import io.modelcontextprotocol.spec.McpSchema.Tool;
 import tools.jackson.databind.json.JsonMapper;
 
 public class McpClient01SyncStdio {
-   private static final Logger LOG =
-                            LoggerFactory.getLogger(McpClient01SyncStdio.class);
-   // nome e caminho para o servidor MCP
-   private static final String SERVER_PATH =
-                                         "../../server/mcp_server01_server.jar";
-   // objeto cliente para comunicação com o servidor
-   private final McpSyncClient client;
+	private static final Logger LOG = LoggerFactory.getLogger(McpClient01SyncStdio.class);
+	// onde procurar o JAR do servidor: na pasta server/ do projeto (cliente
+	// executado
+	// pela raiz do projeto ou pelo Eclipse) ou, se não achar, a partir de
+	// target/dist-client
+	private static final String SERVER_JAR_PADRAO = "server/mcp_server01_server.jar";
+	private static final String SERVER_JAR_ALTERNATIVO = "../../server/mcp_server01_server.jar";
+	// objeto cliente para comunicação com o servidor
+	private final McpSyncClient client;
 
-   // será invocado (chamado) pelo servidor (é a forma que o servidor tem para
-   // "conversar" com o cliente)
-   private void loggingMessageNotification(
-                                      LoggingMessageNotification notification) {
-      LOG.info("[NOTIFICAÇÃO MCP] Origem: {} | Nível: {} | Mensagem: {}", 
-               notification.logger(), 
-               notification.level(), 
-               notification.data());
-   }
+	// será invocado (chamado) pelo servidor (é a forma que o servidor tem para
+	// "conversar" com o cliente)
+	private void loggingMessageNotification(LoggingMessageNotification notification) {
+		LOG.info("[NOTIFICAÇÃO MCP] Origem: {} | Nível: {} | Mensagem: {}", notification.logger(), notification.level(),
+				notification.data());
+	}
 
-   private McpSyncClient createClient() {
-      // identifica o servidor a ser chamado/executado
-      File serverJar = new File(SERVER_PATH);
-      // se o objeto File não é um arquivo: erro!!!
-      if (!serverJar.isFile())
-         throw new IllegalStateException("JAR do servidor não encontrado: " +
-		                                 serverJar.getAbsolutePath());
-      // caminho absoluto do programa executável do servidor
-      String jarPath = serverJar.getAbsolutePath();
-      LOG.info("Servidor MCP: {}",jarPath);
-      // comando para executar a aplicação servidor
-      ServerParameters params  = ServerParameters.builder("java")
-                                                 .args("-jar",jarPath)
-                                                 .build();
-      // cria o objeto para comunicação entre cliente e servidor
-      JacksonMcpJsonMapper jsonMapper = new JacksonMcpJsonMapper(
-                                                              new JsonMapper());
-      // estabelece que a comunicação usará o transporte STDIO
-      StdioClientTransport   transport  = new StdioClientTransport(params,
-                                                                   jsonMapper);
-      // captura a comunicação entre o cliente e o servidor
-      transport.setStdErrorHandler(
-                                   line -> LOG.info("[SERVER STDERR] {}", line)
-                                  );
-      // constrói o objeto cliente
-      return McpClient.sync(transport)
-                      // CONFIGURAÇÃO DO LISTENER DE LOGGING:
-                      // Registra o handler (tratador) para capturar as
-                      // notificações enviadas pelo servidor
-                      .loggingConsumer(this::loggingMessageNotification)
-                      .build();
-   }
+	// descobre onde está o JAR do servidor: a variável de ambiente MCP_SERVER_JAR
+	// tem prioridade; depois a pasta server/ do projeto; por último o caminho
+	// relativo
+	// de quando o cliente é executado dentro de target/dist-client
+	private File localizarJarDoServidor() {
+		String informado = System.getenv("MCP_SERVER_JAR");
+		if (informado != null && !informado.isBlank())
+			return new File(informado);
 
-   private void execute() {
-      // inicializa o cliente com o transporte STDIO para o servidor
-      client.initialize();
-      // define o nível mínimo de "logging" que o cliente quer receber do
-      // servidor
-      client.setLoggingLevel(LoggingLevel.INFO);
+		File padrao = new File(SERVER_JAR_PADRAO);
+		return padrao.isFile() ? padrao : new File(SERVER_JAR_ALTERNATIVO);
+	}
 
-      // executa o 'looping' para:
-      // - listar ferramentas
-      // - selecionar ferramenta
-      // - realizar entrada de dados da ferramenta, se houver
-      // - executar ferramenta
-      listSelectRunToolLooping();
-   }
+	private McpSyncClient createClient() {
+		// identifica o servidor a ser chamado/executado
+		File serverJar = localizarJarDoServidor();
+		// se o objeto File não é um arquivo: erro!!!
+		if (!serverJar.isFile())
+			throw new IllegalStateException("JAR do servidor não encontrado: " + serverJar.getAbsolutePath()
+					+ ". Gere o servidor antes " + "(mvn clean package -Pserver -DskipTests).");
+		// caminho absoluto do programa executável do servidor
+		String jarPath = serverJar.getAbsolutePath();
+		LOG.info("Servidor MCP: {}", jarPath);
+		// comando para executar a aplicação servidor
+		ServerParameters.Builder builder = ServerParameters.builder("java").args("-jar", jarPath);
+		// o processo do servidor NÃO herda todas as variáveis do terminal:
+		// a chave da IA precisa ser repassada explicitamente
+		String chave = System.getenv("GEMINI_API_KEY");
+		if (chave != null && !chave.isBlank())
+			builder.addEnvVar("GEMINI_API_KEY", chave);
+		ServerParameters params = builder.build();
+		// cria o objeto para comunicação entre cliente e servidor
+		JacksonMcpJsonMapper jsonMapper = new JacksonMcpJsonMapper(new JsonMapper());
+		// estabelece que a comunicação usará o transporte STDIO
+		StdioClientTransport transport = new StdioClientTransport(params, jsonMapper);
+		// captura a comunicação entre o cliente e o servidor
+		transport.setStdErrorHandler(line -> LOG.info("[SERVER STDERR] {}", line));
+		// constrói o objeto cliente
+		return McpClient.sync(transport)
+				// a IA pode demorar em extratos grandes
+				.requestTimeout(java.time.Duration.ofMinutes(5)).loggingConsumer(this::loggingMessageNotification)
+				.build();
+	}
 
-   private void close() {
-      LOG.info("Fechando cliente MCP...");
-      // encerra o cliente
-      client.closeGracefully();
-      LOG.info("Cliente MCP fechado.");
-   }
+	private void execute() {
+		// inicializa o cliente com o transporte STDIO para o servidor
+		client.initialize();
+		// define o nível mínimo de "logging" que o cliente quer receber do
+		// servidor
+		client.setLoggingLevel(LoggingLevel.INFO);
 
-   private void listSelectRunToolLooping() {
-      // os parâmetros para a(s) ferramenta(s) serão lidos da entrada padrão
-      Scanner         scanner = new Scanner(System.in);
-      // recupera as ferramentas disponíveis no servidor
-      ListToolsResult tools   = loadTools();
-      // executa "in perpetuum"
-      while (true) {
-         // mostra as ferramentas (menu) ao usuário
-         showMenu(tools);
-         // exibe o prompt ao usuário
-         System.out.print("> ");
-         // se não houver qualquer entrada, encerra o 'looping'
-         if (!scanner.hasNextLine())
-            break;
-         // obtém uma entrada e remove espaços de ambos os lados, se houverem
-         String command = scanner.nextLine().trim();
-         // se nada foi digitado, reinicia o 'looping'
-         if (command.isBlank())
-            continue;
-         // se o usuário desejar encerrar
-         if ("sair".equalsIgnoreCase(command))
-            break;
-         // se o usuário desejar a lista de ferramentas disponibilizada pelo
-         // servidor MCP
-         if ("listar".equalsIgnoreCase(command)) {
-            tools = loadTools();
-            // reinicia o 'looping'
-            continue;
-         }
-         // tenta encontrar a ferramenta desejada
-         Tool selectedTool = selectTool(tools.tools(),command);
-         // se a ferramenta não foi encontrada, reinicia o 'looping'
-         if (selectedTool == null) {
-            LOG.warn("Ferramenta não encontrada: {}",command);
-            continue;
-         }
-         // ao chegarmos aqui a ferramenta pode ser executada
-         executeTool(selectedTool,scanner);
-      }
-   }
+		// executa o 'looping' para:
+		// - listar ferramentas
+		// - selecionar ferramenta
+		// - realizar entrada de dados da ferramenta, se houver
+		// - executar ferramenta
+		listSelectRunToolLooping();
+	}
 
-   private ListToolsResult loadTools() {
-      ListToolsResult result = client.listTools();
+	private void close() {
+		LOG.info("Fechando cliente MCP...");
+		// encerra o cliente
+		client.closeGracefully();
+		LOG.info("Cliente MCP fechado.");
+	}
 
-      LOG.info("Servidor disponibilizou {} ferramenta(s).",
-               result.tools().size());
+	private void listSelectRunToolLooping() {
+		// os parâmetros para a(s) ferramenta(s) serão lidos da entrada padrão
+		Scanner scanner = new Scanner(System.in);
+		// recupera as ferramentas disponíveis no servidor
+		ListToolsResult tools = loadTools();
+		// executa "in perpetuum"
+		while (true) {
+			// mostra as ferramentas (menu) ao usuário
+			showMenu(tools);
+			// exibe o prompt ao usuário
+			System.out.print("> ");
+			// se não houver qualquer entrada, encerra o 'looping'
+			if (!scanner.hasNextLine())
+				break;
+			// obtém uma entrada e remove espaços de ambos os lados, se houverem
+			String command = scanner.nextLine().trim();
+			// se nada foi digitado, reinicia o 'looping'
+			if (command.isBlank())
+				continue;
+			// se o usuário desejar encerrar
+			if ("sair".equalsIgnoreCase(command))
+				break;
+			// se o usuário desejar a lista de ferramentas disponibilizada pelo
+			// servidor MCP
+			if ("listar".equalsIgnoreCase(command)) {
+				tools = loadTools();
+				// reinicia o 'looping'
+				continue;
+			}
+			// tenta encontrar a ferramenta desejada
+			Tool selectedTool = selectTool(tools.tools(), command);
+			// se a ferramenta não foi encontrada, reinicia o 'looping'
+			if (selectedTool == null) {
+				LOG.warn("Ferramenta não encontrada: {}", command);
+				continue;
+			}
+			// ao chegarmos aqui a ferramenta pode ser executada
+			executeTool(selectedTool, scanner);
+		}
+	}
 
-      return result;
-   }
+	private ListToolsResult loadTools() {
+		ListToolsResult result = client.listTools();
 
-   private void showMenu(ListToolsResult tools) {
-      // exibe as ferramentas e opções ao usuário
-      System.out.println();
-      System.out.println("========================================");
-      System.out.println(" CLIENTE MCP");
-      System.out.println("========================================");
+		LOG.info("Servidor disponibilizou {} ferramenta(s).", result.tools().size());
 
-      if (tools.tools().isEmpty()) {
-         System.out.println("Nenhuma ferramenta disponibilizada.");
-      }
-      else {
-         System.out.println("Ferramentas disponíveis:");
-         for (int i = 0; i < tools.tools().size(); i++) {
-            Tool tool = tools.tools().get(i);
+		return result;
+	}
 
-            System.out.printf(" %d - %s%n",i + 1,tool.name());
-            if (tool.description() != null && !tool.description().isBlank())
-               System.out.printf(" %s%n", tool.description());
-         }
-      }
-      System.out.println();
-      System.out.println("Comandos:");
-      System.out.println(" listar - atualizar lista de ferramentas");
-      System.out.println(" sair - encerrar o cliente");
-      System.out.println();
-   }
+	private void showMenu(ListToolsResult tools) {
+		// exibe as ferramentas e opções ao usuário
+		System.out.println();
+		System.out.println("========================================");
+		System.out.println(" CLIENTE MCP");
+		System.out.println("========================================");
 
-   private Tool selectTool(List<Tool> tools, String command) {
-      try {
-         int index = Integer.parseInt(command) - 1;
+		if (tools.tools().isEmpty()) {
+			System.out.println("Nenhuma ferramenta disponibilizada.");
+		} else {
+			System.out.println("Ferramentas disponíveis:");
+			for (int i = 0; i < tools.tools().size(); i++) {
+				Tool tool = tools.tools().get(i);
 
-         if (index >= 0 && index < tools.size())
-            return tools.get(index);
-      }
-      catch (NumberFormatException ignored) {
-         // o comando pode ser o nome da ferramenta
-      }
-      // tenta encontrar a ferramenta solicitada pelo usuário
-      for (Tool tool : tools)
-         if (tool.name().equalsIgnoreCase(command))
-            return tool;
-      // se não encontra a ferramenta
-      return null;
-   }
+				System.out.printf(" %d - %s%n", i + 1, tool.name());
+				if (tool.description() != null && !tool.description().isBlank())
+					System.out.printf(" %s%n", tool.description());
+			}
+		}
+		System.out.println();
+		System.out.println("Comandos:");
+		System.out.println(" listar - atualizar lista de ferramentas");
+		System.out.println(" sair - encerrar o cliente");
+		System.out.println();
+	}
 
-   private void executeTool(Tool tool, Scanner scanner) {
-      System.out.println();
-      System.out.println("----------------------------------------");
-      System.out.println("Ferramenta: " + tool.name());
+	private Tool selectTool(List<Tool> tools, String command) {
+		try {
+			int index = Integer.parseInt(command) - 1;
 
-      if (tool.description() != null)
-         System.out.println("Descrição: " + tool.description());
+			if (index >= 0 && index < tools.size())
+				return tools.get(index);
+		} catch (NumberFormatException ignored) {
+			// o comando pode ser o nome da ferramenta
+		}
+		// tenta encontrar a ferramenta solicitada pelo usuário
+		for (Tool tool : tools)
+			if (tool.name().equalsIgnoreCase(command))
+				return tool;
+		// se não encontra a ferramenta
+		return null;
+	}
 
-      Map<String, Object> arguments = readArguments(tool,scanner);
-      CallToolRequest     request   = CallToolRequest.builder(tool.name())
-    			                                     .arguments(arguments)
-    			                                     .build();
-      LOG.info("Executando ferramenta '{}'",tool.name());
-      try {
-         CallToolResult result = client.callTool(request);
+	private void executeTool(Tool tool, Scanner scanner) {
+		System.out.println();
+		System.out.println("----------------------------------------");
+		System.out.println("Ferramenta: " + tool.name());
 
-         showResult(result);
-      }
-      catch (Exception ex) {
-         LOG.error("Erro executando ferramenta '{}'",tool.name(),ex);
-      }
-   }
+		if (tool.description() != null)
+			System.out.println("Descrição: " + tool.description());
 
-   private Map<String, Object> readArguments(Tool tool, Scanner scanner) {
-      Map<String, Object> arguments = new LinkedHashMap<>();
-      // recupera os esquema JSON, que define os parâmetros da ferramenta, para
-      // solicitar os valores ao usuário
-      Map<String, Object> schema    = tool.inputSchema();
-      // se o esquema não existe ou está vazio, retorna uma lista vazia
-      if (schema == null || schema.isEmpty())
-         return arguments;
-      // recupera as propriedades do esquema da ferramenta
-      // ver método register() da classe SimpleReportTool
-      Object propertiesObject = schema.get("properties");
+		Map<String, Object> arguments = readArguments(tool, scanner);
+		CallToolRequest request = CallToolRequest.builder(tool.name()).arguments(arguments).build();
+		LOG.info("Executando ferramenta '{}'", tool.name());
+		try {
+			CallToolResult result = client.callTool(request);
 
-      if (!(propertiesObject instanceof Map<?, ?>))
-         return arguments;
+			showResult(result);
+		} catch (Exception ex) {
+			LOG.error("Erro executando ferramenta '{}'", tool.name(), ex);
+		}
+	}
 
-      Map<?, ?> properties = (Map<?, ?>) propertiesObject;
-      List<?>   required   = getRequiredProperties(schema);
+	private Map<String, Object> readArguments(Tool tool, Scanner scanner) {
+		Map<String, Object> arguments = new LinkedHashMap<>();
+		// recupera os esquema JSON, que define os parâmetros da ferramenta, para
+		// solicitar os valores ao usuário
+		Map<String, Object> schema = tool.inputSchema();
+		// se o esquema não existe ou está vazio, retorna uma lista vazia
+		if (schema == null || schema.isEmpty())
+			return arguments;
+		// recupera as propriedades do esquema da ferramenta
+		Object propertiesObject = schema.get("properties");
 
-      if (properties.isEmpty())
-         return arguments;
+		if (!(propertiesObject instanceof Map<?, ?>))
+			return arguments;
 
-      System.out.println();
-      System.out.println("Informe os parâmetros:");
-      for (Map.Entry<?, ?> entry : properties.entrySet()) {
-         String name = String.valueOf(entry.getKey());
+		Map<?, ?> properties = (Map<?, ?>) propertiesObject;
+		List<?> required = getRequiredProperties(schema);
 
-         if (!(entry.getValue() instanceof Map<?, ?>))
-            continue;
-         // recupera o esquema (a descrição dos parâmetros) da ferramenta
-         Map<?, ?> property    = (Map<?, ?>) entry.getValue();
-         String    type        = getStringValue(property,"type","string");
-         String    description = getStringValue(property,"description","");
-         boolean   isRequired  = required.contains(name);
-         Object    value       = readArgument(scanner,name,type,description,
-        			                          isRequired,property);
+		if (properties.isEmpty())
+			return arguments;
 
-         if (value != null)
-            arguments.put(name,value);
-      }
-      return arguments;
-   }
+		System.out.println();
+		System.out.println("Informe os parâmetros:");
+		for (Map.Entry<?, ?> entry : properties.entrySet()) {
+			String name = String.valueOf(entry.getKey());
 
-   private String getStringValue(Map<? ,?> map, String key,
-                                 String defaultValue) {
-      Object value = map.get(key);
+			if (!(entry.getValue() instanceof Map<?, ?>))
+				continue;
+			// recupera o esquema (a descrição dos parâmetros) da ferramenta
+			Map<?, ?> property = (Map<?, ?>) entry.getValue();
+			String type = getStringValue(property, "type", "string");
+			String description = getStringValue(property, "description", "");
+			boolean isRequired = required.contains(name);
+			Object value = readArgument(scanner, name, type, description, isRequired, property);
 
-      return value != null ? String.valueOf(value) : defaultValue;
-   }
+			if (value != null)
+				arguments.put(name, value);
+		}
+		return arguments;
+	}
 
-   private List<?> getRequiredProperties(Map<String, Object> schema) {
-      Object required = schema.get("required");
-      // verifica se há uma ou mais propriedades no esquema JSON que são
-      // obrigatórias
-      if (required instanceof List<?>)
-         return (List<?>) required;
-      // retorna uma lista vazia
-      return List.of();
-   }
+	private String getStringValue(Map<?, ?> map, String key, String defaultValue) {
+		Object value = map.get(key);
 
-   private Object readArgument(Scanner scanner, String name, String type,
-			                   String description, boolean required,
-			                   Map<?, ?> schema) {
-      while (true) {
-         System.out.println();
-         System.out.println("'" + name + "' [" + type + "] " +
-                            (required ? "(obrigatório)" : "(opcional)"));
-         System.out.println("Descrição: " + description);
-         System.out.print("Valor: ");
+		return value != null ? String.valueOf(value) : defaultValue;
+	}
 
-         if (!scanner.hasNextLine())
-            return null;
+	private List<?> getRequiredProperties(Map<String, Object> schema) {
+		Object required = schema.get("required");
+		// verifica se há uma ou mais propriedades no esquema JSON que são
+		// obrigatórias
+		if (required instanceof List<?>)
+			return (List<?>) required;
+		// retorna uma lista vazia
+		return List.of();
+	}
 
-         String value = scanner.nextLine().trim();
-         if (value.isBlank()) {
-            if (!required) return null;
+	private Object readArgument(Scanner scanner, String name, String type, String description, boolean required,
+			Map<?, ?> schema) {
+		while (true) {
+			System.out.println();
+			System.out.println("'" + name + "' [" + type + "] " + (required ? "(obrigatório)" : "(opcional)"));
+			System.out.println("Descrição: " + description);
+			System.out.print("Valor: ");
 
-            System.out.println("Este parâmetro é obrigatório.");
-            continue;
-         }
-         try { return convertValue(value,type,schema); }
-         catch (IllegalArgumentException ex) {
-            System.out.println("Valor inválido: " + ex.getMessage());
-         }
-      }
-   }
+			if (!scanner.hasNextLine())
+				return null;
 
-   private Object convertValue(String value, String type, Map<?, ?> schema) {
-      return switch (type) {
-    	        case "integer" -> Integer.valueOf(value);
-    	        case "number" -> Double.valueOf(value);
-    	        case "boolean" -> parseBoolean(value);
-    	        case "string" -> value;
-    	        default -> parseComplexValue(value,type,schema);
-             };
-   }
+			String value = scanner.nextLine().trim();
+			if (value.isBlank()) {
+				if (!required)
+					return null;
 
-   private Boolean parseBoolean(String value) {
-      if ("true".equalsIgnoreCase(value) || "sim".equalsIgnoreCase(value))
-         return true;
+				System.out.println("Este parâmetro é obrigatório.");
+				continue;
+			}
+			try {
+				return convertValue(value, type, schema);
+			} catch (IllegalArgumentException ex) {
+				System.out.println("Valor inválido: " + ex.getMessage());
+			}
+		}
+	}
 
-      if ("false".equalsIgnoreCase(value) ||
-          "não".equalsIgnoreCase(value) || "nao".equalsIgnoreCase(value))
-         return false;
+	private Object convertValue(String value, String type, Map<?, ?> schema) {
+		return switch (type) {
+		case "integer" -> Integer.valueOf(value);
+		case "number" -> Double.valueOf(value);
+		case "boolean" -> parseBoolean(value);
+		case "string" -> value;
+		default -> parseComplexValue(value, type, schema);
+		};
+	}
 
-      throw new IllegalArgumentException("informe true/false ou sim/não");
-   }
+	private Boolean parseBoolean(String value) {
+		if ("true".equalsIgnoreCase(value) || "sim".equalsIgnoreCase(value))
+			return true;
 
-   private Object parseComplexValue(String value, String type,
-			                        Map<?, ?> schema) {
-      if ("null".equals(type))
-         return null;
+		if ("false".equalsIgnoreCase(value) || "não".equalsIgnoreCase(value) || "nao".equalsIgnoreCase(value))
+			return false;
 
-      throw new IllegalArgumentException("tipo não suportado pelo modo " +
-                                         "interativo: " + type);
-   }
+		throw new IllegalArgumentException("informe true/false ou sim/não");
+	}
 
-   private void showResult(CallToolResult result) {
-      System.out.println();
-      System.out.println("=============== RESULTADO ===============");
-      System.out.println("   Erro: " + (result.isError() ? "Sim" : "Não"));
-      System.out.println("Content:" );
-         result.content().forEach(content -> System.out.println(" " + content));
+	private Object parseComplexValue(String value, String type, Map<?, ?> schema) {
+		if ("null".equals(type))
+			return null;
 
-      if (result.structuredContent() != null) {
-         System.out.println();
-         System.out.println("Structured Content:");
-         System.out.println(result.structuredContent());
-      }
-      System.out.println( "==========================================" );
-   }
+		throw new IllegalArgumentException("tipo não suportado pelo modo " + "interativo: " + type);
+	}
 
-   public McpClient01SyncStdio() {
-      this.client = createClient();
-   }
+	private void showResult(CallToolResult result) {
+		System.out.println();
+		System.out.println("=============== RESULTADO ===============");
+		System.out.println("   Erro: " + (result.isError() ? "Sim" : "Não"));
+		System.out.println("Content:");
+		result.content().forEach(content -> System.out.println(" " + content));
 
-   public static void main(String... args) {
-	   McpClient01SyncStdio clientStdio = new McpClient01SyncStdio();
+		if (result.structuredContent() != null) {
+			System.out.println();
+			System.out.println("Structured Content:");
+			System.out.println(result.structuredContent());
+		}
+		System.out.println("==========================================");
+	}
 
-	   try { clientStdio.execute(); }
-	   finally { clientStdio.close(); }
-   }
+	public McpClient01SyncStdio() {
+		this.client = createClient();
+	}
+
+	public static void main(String... args) {
+		McpClient01SyncStdio clientStdio = new McpClient01SyncStdio();
+
+		try {
+			clientStdio.execute();
+		} finally {
+			clientStdio.close();
+		}
+	}
 }
