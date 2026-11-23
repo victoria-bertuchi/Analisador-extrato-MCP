@@ -10,29 +10,29 @@ import java.time.format.DateTimeFormatter;
  */
 public class FormatadorResumoDoMes {
 
-   private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+	private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
-   private final FormatadorDeMoeda formatadorDeMoeda = new FormatadorDeMoeda();
+	private final FormatadorDeMoeda formatadorDeMoeda = new FormatadorDeMoeda();
 
-   public String formatar(ResumoDoMes resumo) {
-      Transacao maior = resumo.maiorGasto();
+	public String formatar(ResumoDoMes resumo) {
+		Transacao maior = resumo.maiorGasto();
 
-      return String.join("\n",
-            "Resumo do extrato (" + data(resumo.primeiraData()) + " a " + data(resumo.ultimaData()) + ")",
-            "Total gasto: " + moeda(resumo.total()) + " em " + compras(resumo.quantidadeDeCompras()),
-            "Maior gasto: " + moeda(maior.valor()) + " em " + data(maior.data()) + " (" + maior.descricao() + ")",
-            "Média por dia: " + moeda(resumo.mediaPorDia()));
-   }
+		return String.join("\n",
+				"Resumo do extrato (" + data(resumo.primeiraData()) + " a " + data(resumo.ultimaData()) + ")",
+				"Total gasto: " + moeda(resumo.total()) + " em " + compras(resumo.quantidadeDeCompras()),
+				"Maior gasto: " + moeda(maior.valor()) + " em " + data(maior.data()) + " (" + maior.descricao() + ")",
+				"Média por dia: " + moeda(resumo.mediaPorDia()));
+	}
 
-   private String compras(int quantidade) {
-      return quantidade + (quantidade == 1 ? " compra" : " compras");
-   }
+	private String compras(int quantidade) {
+		return quantidade + (quantidade == 1 ? " compra" : " compras");
+	}
 
-   private String data(LocalDate data) {
-      return FORMATO_DATA.format(data);
-   }
+	private String data(LocalDate data) {
+		return FORMATO_DATA.format(data);
+	}
 
-   private String moeda(BigDecimal valor) {
-      return formatadorDeMoeda.formatar(valor);
-   }
+	private String moeda(BigDecimal valor) {
+		return formatadorDeMoeda.formatar(valor);
+	}
 }
