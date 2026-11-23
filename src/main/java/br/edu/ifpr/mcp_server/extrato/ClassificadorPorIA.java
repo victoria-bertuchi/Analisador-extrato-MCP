@@ -3,20 +3,30 @@ package br.edu.ifpr.mcp_server.extrato;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import br.edu.ifpr.mcp_server.ia.ClienteIA;
 
+/**
+ * Classifica as compras perguntando para uma IA. Manda os lançamentos em lotes
+ * e transforma a resposta em categorias.
+ */
 public class ClassificadorPorIA implements ClassificadorDeCategoria {
 
-	// quantos lançamentos vão em cada pergunta para a IA (evita respostas grandes demais)
+	// quantos lançamentos vão em cada pergunta para a IA (evita respostas grandes
+	// demais)
 	private static final int TAMANHO_DO_LOTE = 50;
+
+	// a lista vem do enum Categoria, então nunca fica diferente das categorias que
+	// existem (DRY)
+	private static final String LISTA_DE_CATEGORIAS = Arrays.stream(Categoria.values()).map(Enum::name)
+			.collect(Collectors.joining(", "));
 
 	// regras fixas encaminhadas para a IA
 	private static final String INSTRUCOES = """
 			Você é um assistente financeiro especialista em extratos bancários brasileiros.
 			Você vai receber uma lista numerada de lançamentos. Classifique cada um em uma categoria.
-			Use apenas: DELIVERY, TRANSPORTE, MERCADO, FARMACIA, SAUDE, STREAMING, ALIMENTACAO,
-			EDUCACAO, LAZER, VESTUARIO, CONTAS_DA_CASA, PET, OUTROS.
+			Use apenas: %s.
 			Use o nome do estabelecimento para decidir (ex.: Ifood = DELIVERY, Uber = TRANSPORTE,
 			Netflix = STREAMING, supermercado = MERCADO, restaurante, lanchonete ou padaria = ALIMENTACAO,
 			drogaria = FARMACIA, cinema = LAZER).
@@ -26,7 +36,7 @@ public class ClassificadorPorIA implements ClassificadorDeCategoria {
 			Exemplo:
 			1=DELIVERY
 			2=OUTROS
-			""";
+			""".formatted(LISTA_DE_CATEGORIAS);
 
 	// quem vai conversar com a IA
 	private final ClienteIA cliente;
@@ -44,7 +54,8 @@ public class ClassificadorPorIA implements ClassificadorDeCategoria {
 	@Override
 	public List<Categoria> classificarTodas(List<Transacao> transacoes) {
 		List<Categoria> categorias = new ArrayList<>();
-		// manda em lotes: um extrato grande vira poucas perguntas, em vez de uma por compra
+		// manda em lotes: um extrato grande vira poucas perguntas, em vez de uma por
+		// compra
 		for (int inicio = 0; inicio < transacoes.size(); inicio += TAMANHO_DO_LOTE) {
 			int fim = Math.min(inicio + TAMANHO_DO_LOTE, transacoes.size());
 			categorias.addAll(classificarLote(transacoes.subList(inicio, fim)));
@@ -62,18 +73,23 @@ public class ClassificadorPorIA implements ClassificadorDeCategoria {
 		String resposta;
 		try {
 			resposta = cliente.perguntar(INSTRUCOES, lista.toString());
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException("A comunicação com a IA foi interrompida.", e);
 		} catch (Exception e) {
 			// erro de internet, chave errada, sem crédito para uso etc.
 			throw new IllegalStateException("Não foi possível falar com a IA: " + e.getMessage(), e);
 		}
 
-		// começa tudo como OUTROS; cada linha "N=CATEGORIA" válida substitui a posição N
+		// começa tudo como OUTROS; cada linha "N=CATEGORIA" válida substitui a posição
+		// N
 		Categoria[] categorias = new Categoria[lote.size()];
 		Arrays.fill(categorias, Categoria.OUTROS);
 		for (String linha : resposta.split("\\R")) {
 			String[] partes = linha.split("=");
 			if (partes.length == 1 && lote.size() == 1) {
-				// com um lançamento só, a IA pode responder apenas a categoria (ex.: "DELIVERY")
+				// com um lançamento só, a IA pode responder apenas a categoria (ex.:
+				// "DELIVERY")
 				partes = new String[] { "1", partes[0] };
 			}
 			if (partes.length != 2) {
